@@ -1,9 +1,11 @@
 require 'net/http'
 require 'ipaddr'
 require 'rexml/document'
+require 'yajl/http_stream'
 require 'yaml'
 require 'timeout'
 require 'logger'
+Yajl::VERSION = "0.8.0"
 
 module Geokit
 
@@ -388,18 +390,25 @@ module Geokit
     # Google geocoder implementation.  Requires the Geokit::Geocoders::GOOGLE variable to
     # contain a Google API key.  Conforms to the interface set by the Geocoder class.
     class GoogleGeocoder < Geocoder
-
-      private 
       
-      # Template method which does the reverse-geocode lookup.
-      def self.do_reverse_geocode(latlng) 
-        latlng=LatLng.normalize(latlng)
-        res = self.call_geocoder_service("http://maps.google.com/maps/geo?ll=#{Geokit::Inflector::url_escape(latlng.ll)}&output=xml&key=#{Geokit::Geocoders::google}&oe=utf-8")
-        #        res = Net::HTTP.get_response(URI.parse("http://maps.google.com/maps/geo?ll=#{Geokit::Inflector::url_escape(address_str)}&output=xml&key=#{Geokit::Geocoders::google}&oe=utf-8"))
-        return GeoLoc.new unless (res.is_a?(Net::HTTPSuccess) || res.is_a?(Net::HTTPOK))
-        xml = res.body
-        logger.debug "Google reverse-geocoding. LL: #{latlng}. Result: #{xml}"
-        return self.xml2GeoLoc(xml)        
+      GeoLoc.class_eval do
+        def street_address
+          @street_address = street_number.to_s+" "+street_name.to_s
+        end
+      end
+      
+      private 
+
+      def self.do_reverse_geocode(latlng, options = {}) 
+        json_hash = {}
+        latlng = LatLng.normalize(latlng)
+        sensor = options[:sensor] || false
+        uri = URI.parse("http://maps.google.com/maps/api/geocode/json?latlng=#{latlng.ll}&sensor=#{sensor}")
+        Yajl::HttpStream.get(uri) do |hash|
+          json_hash = hash
+        end
+        logger.debug "Google reverse-geocoding. LL: #{latlng.ll}. Result: #{json_hash}"
+        json2GeoLoc(json_hash)        
       end  
 
       # Template method which does the geocode lookup.
@@ -428,34 +437,36 @@ module Geokit
       # bounds = Geokit::Bounds.normalize([34.074081, -118.694401], [34.321129, -118.399487])
       # Geokit::Geocoders::GoogleGeocoder.geocode('Winnetka', :bias => bounds).state # => 'CA'
       def self.do_geocode(address, options = {})
-        bias_str = options[:bias] ? construct_bias_string_from_options(options[:bias]) : ''
+        json_hash = {}
+        bias_str = options[:bias] ? bias_string(options[:bias]) : ''
+        sensor = options[:sensor] || false
         address_str = address.is_a?(GeoLoc) ? address.to_geocodeable_s : address
-        res = self.call_geocoder_service("http://maps.google.com/maps/geo?q=#{Geokit::Inflector::url_escape(address_str)}&output=xml#{bias_str}&key=#{Geokit::Geocoders::google}&oe=utf-8")
-        return GeoLoc.new if !res.is_a?(Net::HTTPSuccess)
-        xml = res.body
-        logger.debug "Google geocoding. Address: #{address}. Result: #{xml}"
-        return self.xml2GeoLoc(xml, address)        
+        uri = URI.parse("http://maps.google.com/maps/api/geocode/json?address=#{CGI.escape(address_str)}#{bias_str}&sensor=#{sensor}")
+        Yajl::HttpStream.get(uri) do |hash|
+          json_hash = hash
+        end
+        logger.debug "Google geocoding. Address: #{address}. Result: #{json_hash}"
+        json2GeoLoc(json_hash, address)        
       end
       
-      def self.construct_bias_string_from_options(bias)
-        if bias.is_a?(String) or bias.is_a?(Symbol)
+      def self.bias_string(bias)
+        case bias.class
+        when String, Symbol
           # country code biasing
-          "&gl=#{bias.to_s.downcase}"
-        elsif bias.is_a?(Bounds)
+          "&region=#{bias.to_s.downcase}"
+        when Bounds
           # viewport biasing
-          "&ll=#{bias.center.ll}&spn=#{bias.to_span.ll}"
+          "&bounds=#{bias.sw.ll}|#{bias.ne.ll}"
         end
       end
       
-      def self.xml2GeoLoc(xml, address="")
-        doc=REXML::Document.new(xml)
+      def self.json2GeoLoc(hash, address="")
 
-        if doc.elements['//kml/Response/Status/code'].text == '200'
+        if hash["status"] == 'OK'
           geoloc = nil
-          # Google can return multiple results as //Placemark elements. 
           # iterate through each and extract each placemark as a geoloc
-          doc.each_element('//Placemark') do |e|
-            extracted_geoloc = extract_placemark(e) # g is now an instance of GeoLoc
+          hash["results"].each do |e|
+            extracted_geoloc = extract_geoloc(e) # g is now an instance of GeoLoc
             if geoloc.nil? 
               # first time through, geoloc is still nil, so we make it the geoloc we just extracted
               geoloc = extracted_geoloc 
@@ -465,61 +476,59 @@ module Geokit
               geoloc.all.push(extracted_geoloc) 
             end  
           end
-          return geoloc
-        elsif doc.elements['//kml/Response/Status/code'].text == '620'
+          geoloc
+        elsif hash["status"] == "OVER_QUERY_LIMIT"
            raise Geokit::TooManyQueriesError
         else
           logger.info "Google was unable to geocode address: "+address
-          return GeoLoc.new
+          GeoLoc.new
         end
 
       rescue Geokit::TooManyQueriesError
-        # re-raise because of other rescue
-        raise Geokit::TooManyQueriesError, "Google returned a 620 status, too many queries. The given key has gone over the requests limit in the 24 hour period or has submitted too many requests in too short a period of time. If you're sending multiple requests in parallel or in a tight loop, use a timer or pause in your code to make sure you don't send the requests too quickly."
+        raise Geokit::TooManyQueriesError, "Google returned a OVER_QUERY_LIMIT 
+        status, too many queries which indicates that you are over your quota."
       rescue
         logger.error "Caught an error during Google geocoding call: "+$!
-        return GeoLoc.new
-      end  
+        GeoLoc.new
+      end
 
-      # extracts a single geoloc from a //placemark element in the google results xml
-      def self.extract_placemark(doc)
+      def self.extract_geoloc(hash)
         res = GeoLoc.new
-        coordinates=doc.elements['.//coordinates'].text.to_s.split(',')
-
-        #basics
-        res.lat=coordinates[1]
-        res.lng=coordinates[0]
-        res.country_code=doc.elements['.//CountryNameCode'].text if doc.elements['.//CountryNameCode']
-        res.provider='google'
-
-        #extended -- false if not not available
-        res.city = doc.elements['.//LocalityName'].text if doc.elements['.//LocalityName']
-        res.state = doc.elements['.//AdministrativeAreaName'].text if doc.elements['.//AdministrativeAreaName']
-        res.province = doc.elements['.//SubAdministrativeAreaName'].text if doc.elements['.//SubAdministrativeAreaName']
-        res.full_address = doc.elements['.//address'].text if doc.elements['.//address'] # google provides it
-        res.zip = doc.elements['.//PostalCodeNumber'].text if doc.elements['.//PostalCodeNumber']
-        res.street_address = doc.elements['.//ThoroughfareName'].text if doc.elements['.//ThoroughfareName']
-        res.country = doc.elements['.//CountryName'].text if doc.elements['.//CountryName']
-        res.district = doc.elements['.//DependentLocalityName'].text if doc.elements['.//DependentLocalityName']
-        # Translate accuracy into Yahoo-style token address, street, zip, zip+4, city, state, country
-        # For Google, 1=low accuracy, 8=high accuracy
-        address_details=doc.elements['.//*[local-name() = "AddressDetails"]']
-        res.accuracy = address_details ? address_details.attributes['Accuracy'].to_i : 0
-        res.precision=%w{unknown country state state city zip zip+4 street address building}[res.accuracy]
-        
-        # google returns a set of suggested boundaries for the geocoded result
-        if suggested_bounds = doc.elements['//LatLonBox']  
-          res.suggested_bounds = Bounds.normalize(
-                                  [suggested_bounds.attributes['south'], suggested_bounds.attributes['west']], 
-                                  [suggested_bounds.attributes['north'], suggested_bounds.attributes['east']])
-        end
-        
+        res.provider = 'google'
+        res.lat = hash["geometry"]["location"]["lat"]
+        res.lng = hash["geometry"]["location"]["lng"]
+        res.full_address = hash["formatted_address"]
+        res.precision = hash["geometry"]["location_type"]
+        res.suggested_bounds = Bounds.normalize(
+            [hash["geometry"]["viewport"]["southwest"]["lat"],
+             hash["geometry"]["viewport"]["southwest"]["lng"]],
+            [hash["geometry"]["viewport"]["northeast"]["lat"],
+             hash["geometry"]["viewport"]["northeast"]["lng"]])
+        res.street_address = ""
         res.success=true
-
-        return res
+        
+        hash["address_components"].each do |add|
+          case add["types"].first
+          when "street_number"
+            res.street_number = add["long_name"]
+          when "route"
+            res.street_name = add["long_name"]
+          when "locality"
+            res.city = add["long_name"]
+          when "administrative_area_level_2"
+            res.province = add["long_name"]
+          when "administrative_area_level_1"
+            res.state = add["short_name"]
+          when "country"
+            res.country = add["long_name"]
+            res.country_code = add["short_name"]
+          when "postal_code"
+            res.zip = add["long_name"]
+          end
+        end
+        res
       end
     end
-
 
     # -------------------------------------------------------------------------------------------
     # IP Geocoders
