@@ -21,10 +21,9 @@ I have written this benchmark that makes 200 geocoding requests to Google using 
     end
 
 
-                               user        system       total              real
-With Yajl API V3   0.390000    0.160000   0.550000    ( 90.042886)
-With old way        10.050000   0.420000   10.470000   (166.538278)
-<code>
+                                  user          system        total              real
+    With Yajl API V3   0.390000    0.160000   0.550000    ( 90.042886)
+    With old way        10.050000   0.420000   10.470000   (166.538278)
 
 ## GOOGLE GROUP
 
