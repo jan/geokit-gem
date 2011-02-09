@@ -6,8 +6,8 @@ I wrote a google geocoder to substitute the current one. The reasons were many. 
 ## BENCHMARKS
 
 I have written this benchmark that makes 200 geocoding requests to Google using the old API (xml) and the new API (json):
-<code>
-Benchmark.bm(7).do |x|
+
+    Benchmark.bm(7).do |x|
      x.report("With Yajl API V3") do 
          (1..200).each do
              Geokit::Geocoders::NGoogleGeocoder.geocode("201 Varick Street, New York") 
@@ -18,7 +18,7 @@ Benchmark.bm(7).do |x|
                Geokit::Geocoders::GoogleGeocoder.geocode("201 Varick Street, New York")
            end
      end 
- end
+    end
 
 
                                user        system       total              real
