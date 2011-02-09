@@ -12,6 +12,8 @@ Benchmark.bm(7) do |x|
     x.report("With Yajl API V3"){ (1..200).each{ Geokit::Geocoders::NGoogleGeocoder.geocode("201 Varick Street, New York") } }
     x.report("With old way"){ (1..200).each{ Geokit::Geocoders::GoogleGeocoder.geocode("201 Varick Street, New York") } } 
 end
+
+
                                user        system       total              real
 With Yajl API V3   0.390000    0.160000   0.550000    ( 90.042886)
 With old way        10.050000   0.420000   10.470000   (166.538278)
