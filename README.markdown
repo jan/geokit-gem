@@ -10,7 +10,7 @@ I have written this benchmark that makes 200 geocoding requests to Google using 
     Benchmark.bm(7).do |x|
      x.report("With Yajl API V3") do 
          (1..200).each do
-             Geokit::Geocoders::NGoogleGeocoder.geocode("201 Varick Street, New York") 
+             Geokit::Geocoders::GoogleGeocoder.geocode("201 Varick Street, New York") 
           end
     end
     x.report("With old way") do 
