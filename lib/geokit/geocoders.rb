@@ -391,12 +391,6 @@ module Geokit
     # contain a Google API key.  Conforms to the interface set by the Geocoder class.
     class GoogleGeocoder < Geocoder
       
-      GeoLoc.class_eval do
-        def street_address
-          @street_address = street_number.to_s+" "+street_name.to_s
-        end
-      end
-      
       private 
 
       def self.do_reverse_geocode(latlng, options = {}) 
