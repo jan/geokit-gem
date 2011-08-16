@@ -84,6 +84,8 @@ module Geokit
     @@logger=Logger.new(STDOUT)
     @@logger.level=Logger::INFO
     @@domain = nil
+    @@langauge = nil
+    @@bias = nil
     
     def self.__define_accessors
       class_variables.each do |v| 
@@ -396,8 +398,10 @@ module Geokit
       def self.do_reverse_geocode(latlng, options = {}) 
         json_hash = {}
         latlng = LatLng.normalize(latlng)
+        language = options[:language] || Geokit::Geocoders::language
+        language_str = language ? "&language=#{language.to_s.downcase}" : ''
         sensor = options[:sensor] || false
-        uri = URI.parse("http://maps.google.com/maps/api/geocode/json?latlng=#{latlng.ll}&sensor=#{sensor}")
+        uri = URI.parse("http://maps.google.com/maps/api/geocode/json?latlng=#{latlng.ll}#{language_str}&sensor=#{sensor}")
         Yajl::HttpStream.get(uri) do |hash|
           json_hash = hash
         end
@@ -432,10 +436,13 @@ module Geokit
       # Geokit::Geocoders::GoogleGeocoder.geocode('Winnetka', :bias => bounds).state # => 'CA'
       def self.do_geocode(address, options = {})
         json_hash = {}
-        bias_str = options[:bias] ? bias_string(options[:bias]) : ''
+        language = options[:language] || Geokit::Geocoders::language
+        language_str = language ? "&language=#{language.to_s.downcase}" : ''
+        bias = options[:bias] || Geokit::Geocoders::bias
+        bias_str = bias ? bias_string(bias) : ''
         sensor = options[:sensor] || false
         address_str = address.is_a?(GeoLoc) ? address.to_geocodeable_s : address
-        uri = URI.parse("http://maps.google.com/maps/api/geocode/json?address=#{CGI.escape(address_str)}#{bias_str}&sensor=#{sensor}")
+        uri = URI.parse("http://maps.google.com/maps/api/geocode/json?address=#{CGI.escape(address_str)}#{bias_str}#{language_str}&sensor=#{sensor}")
         Yajl::HttpStream.get(uri) do |hash|
           json_hash = hash
         end
