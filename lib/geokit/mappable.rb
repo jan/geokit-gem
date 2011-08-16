@@ -387,12 +387,12 @@ module Geokit
 
     def street_number=(street_number)
       @street_number = street_number
-      @street_address = "#{@street_name} #{@street_number}"
+      @street_address = @street_name.blank? && @street_number.blank? ? nil : "#{@street_name} #{@street_number}"
     end
 
     def street_name=(street_name)
       @street_name = street_name
-      @street_address = "#{@street_name} #{@street_number}"
+      @street_address = @street_name.blank? && @street_number.blank? ? nil : "#{@street_name} #{@street_number}"
     end
 
     # gives you all the important fields as key-value pairs
@@ -410,9 +410,15 @@ module Geokit
 
     # Sets the street address after capitalizing each word within the street address.
     def street_address=(address)
-      @street_address = Geokit::Inflector::titleize(address) if address
-      @street_number = address[/(\d+)/]
-      @street_name = address[/(\D+)/]
+      if address.blank?
+        @street_address = nil
+        @street_number = nil
+        @street_name = nil
+      else
+        @street_address = Geokit::Inflector::titleize(address)
+        @street_number = address[/(\d+)/]
+        @street_name = address[/(\D+)/]
+      end
     end
     
     # Returns a comma-delimited string consisting of the street address, city, state,
@@ -429,7 +435,7 @@ module Geokit
 
     # Returns a string representation of the instance.
     def to_s
-      "Provider: #{provider}\nStreet: #{street_address}\nCity: #{city}\nState: #{state}\nZip: #{zip}\nLatitude: #{lat}\nLongitude: #{lng}\nCountry: #{country_code}\nSuccess: #{success}"
+      "Provider: #{provider.inspect}\nStreet: #{street_address.inspect}\nCity: #{city.inspect}\nState: #{state.inspect}\nZip: #{zip.inspect}\nLatitude: #{lat.inspect}\nLongitude: #{lng.inspect}\nCountry: #{country_code.inspect}\nSuccess: #{success.inspect}"
     end
   end
   
