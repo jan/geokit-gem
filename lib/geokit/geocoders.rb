@@ -84,7 +84,7 @@ module Geokit
     @@logger=Logger.new(STDOUT)
     @@logger.level=Logger::INFO
     @@domain = nil
-    @@langauge = nil
+    @@language = nil
     @@bias = nil
     
     def self.__define_accessors
