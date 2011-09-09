@@ -519,7 +519,8 @@ module Geokit
           when "administrative_area_level_2"
             res.province = add["long_name"]
           when "administrative_area_level_1"
-            res.state = add["short_name"]
+            res.state = add["long_name"]
+            res.state_code = add["short_name"]
           when "country"
             res.country = add["long_name"]
             res.country_code = add["short_name"]
