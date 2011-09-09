@@ -514,6 +514,8 @@ module Geokit
             res.street_number = add["long_name"]
           when "route"
             res.street_name = add["long_name"]
+          when "sublocality"
+            res.district = add["long_name"]
           when "locality"
             res.city = add["long_name"]
           when "administrative_area_level_2"
