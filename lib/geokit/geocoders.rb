@@ -5,7 +5,7 @@ require 'yajl/http_stream'
 require 'yaml'
 require 'timeout'
 require 'logger'
-Yajl::VERSION = "0.8.0"
+#Yajl::VERSION = "0.8.0"
 
 module Geokit
 
